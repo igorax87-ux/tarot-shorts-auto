@@ -1,0 +1,60 @@
+name: Publish YouTube Shorts
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+    - cron: '0 9 * * *'
+    - cron: '0 15 * * *'
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+    inputs:
+      content_type:
+        description: 'Тип контента'
+        required: false
+        default: 'auto'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg fonts-dejavu
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps
+        run: pip install requests Pillow google-auth google-api-python-client google-auth-httplib2
+
+      - name: Determine content type
+        id: content
+        run: |
+          HOUR=$(date -u +%H)
+          if [ "${{ github.event.inputs.content_type }}" != "" ] && [ "${{ github.event.inputs.content_type }}" != "auto" ]; then
+            echo "type=${{ github.event.inputs.content_type }}" >> $GITHUB_OUTPUT
+          elif [ "$HOUR" = "06" ]; then
+            echo "type=card" >> $GITHUB_OUTPUT
+          elif [ "$HOUR" = "09" ]; then
+            echo "type=numerology" >> $GITHUB_OUTPUT
+          elif [ "$HOUR" = "15" ]; then
+            echo "type=tarot" >> $GITHUB_OUTPUT
+          else
+            echo "type=stars" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate and publish video
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_TOKEN: ${{ secrets.YOUTUBE_TOKEN }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          CONTENT_TYPE: ${{ steps.content.outputs.type }}
+        run: python generate_video.py
