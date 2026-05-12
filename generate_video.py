@@ -256,15 +256,18 @@ def build_video(bg_path, overlay_png, music_path, out_path):
         print("🎬 Processing Pexels video...")
         bg_fixed = tempfile.mktemp(suffix="_bg.mp4")
         
+        # Зацикливаем если видео короче 30 секунд
         result = subprocess.run([
-            "ffmpeg", "-y", "-i", bg_path,
+            "ffmpeg", "-y",
+            "-stream_loop", "-1",  # бесконечный loop
+            "-i", bg_path,
             "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1",
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             "-pix_fmt", "yuv420p", "-an", "-t", "32", bg_fixed
         ], capture_output=True, timeout=180)
         
         if result.returncode != 0 or not os.path.exists(bg_fixed) or os.path.getsize(bg_fixed) < 10000:
-            print(f"⚠️ Pexels processing failed, using dark background")
+            print(f"⚠️ Pexels processing failed: {result.stderr.decode()[-300:]}")
             bg_fixed = None
         else:
             bg_path = bg_fixed
@@ -308,17 +311,20 @@ def build_video(bg_path, overlay_png, music_path, out_path):
         result = subprocess.run([
             "ffmpeg", "-y",
             "-i", video_no_audio,
+            "-stream_loop", "-1",  # зацикливаем музыку если она короткая
             "-i", music_path,
             "-c:v", "copy",
             "-c:a", "aac", "-b:a", "128k",
-            "-af", "volume=0.4,afade=t=in:st=0:d=2,afade=t=out:st=27:d=3",
+            "-af", "volume=0.5,afade=t=in:st=0:d=2,afade=t=out:st=27:d=3",
             "-shortest", "-movflags", "+faststart",
             out_path
         ], capture_output=True, timeout=120)
         
-        if result.returncode == 0:
+        if result.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 10000:
             print("✅ Video with music ready!")
             return
+        else:
+            print(f"⚠️ Music add failed: {result.stderr.decode()[-300:]}")
     
     # Без музыки
     import shutil
