@@ -90,46 +90,85 @@ def ask_groq(prompt):
 
 
 def get_pexels_video(content_type):
-    """Скачивает живое видео с Pexels"""
+    """Скачивает уникальное ЖИВОЕ видео с Pexels"""
     queries = PEXELS_QUERIES.get(content_type, PEXELS_QUERIES["stars"])
-    query = random.choice(queries)
     
-    r = requests.get(
-        "https://api.pexels.com/videos/search",
-        headers={"Authorization": PEXELS_API_KEY},
-        params={"query": query, "orientation": "portrait", "size": "medium", "per_page": 20}
-    )
+    # Пробуем несколько запросов подряд для разнообразия
+    all_videos = []
     
-    videos = r.json().get("videos", [])
-    if not videos:
-        print("⚠️ Pexels returned no videos")
+    for query in queries:
+        try:
+            r = requests.get(
+                "https://api.pexels.com/videos/search",
+                headers={"Authorization": PEXELS_API_KEY},
+                params={
+                    "query": query,
+                    "orientation": "portrait",
+                    "size": "medium",
+                    "per_page": 30  # берём больше видео
+                },
+                timeout=10
+            )
+            
+            if r.status_code == 200:
+                videos = r.json().get("videos", [])
+                # Фильтруем только видео длиннее 10 секунд (чтобы были живые, не статичные)
+                videos = [v for v in videos if v.get("duration", 0) >= 10]
+                all_videos.extend(videos)
+                print(f"📹 Found {len(videos)} videos for '{query}'")
+        except Exception as e:
+            print(f"⚠️ Query '{query}' failed: {e}")
+            continue
+    
+    if not all_videos:
+        print("❌ No Pexels videos found")
         return None
     
-    video = random.choice(videos)
+    # Берём случайное видео
+    random.shuffle(all_videos)
+    video = all_videos[0]
+    
     files = video.get("video_files", [])
     
     # Ищем вертикальное HD видео
-    portrait = [f for f in files if f.get("width", 0) < f.get("height", 1) and f.get("height", 0) >= 720]
+    portrait = [f for f in files if f.get("width", 0) <= f.get("height", 1) and f.get("height", 0) >= 720]
     if not portrait:
+        # Если нет вертикальных, берём любое HD
         portrait = [f for f in files if f.get("height", 0) >= 720]
     
     if not portrait:
         print("⚠️ No suitable video files")
         return None
     
-    # Берём лучшее качество
-    portrait.sort(key=lambda x: x.get("height", 0), reverse=True)
-    url = portrait[0]["link"]
+    # Берём файл среднего качества (не самое высокое — быстрее скачается)
+    portrait.sort(key=lambda x: x.get("height", 0))
+    best = portrait[len(portrait) // 2] if len(portrait) > 2 else portrait[0]
     
-    print(f"✅ Pexels: id={video['id']}, query='{query}'")
+    url = best["link"]
+    duration = video.get("duration", 0)
+    
+    print(f"✅ Pexels: id={video['id']}, duration={duration}s, quality={best.get('height')}p")
     
     tmp = tempfile.mktemp(suffix=".mp4")
-    with requests.get(url, stream=True, timeout=120) as resp:
-        with open(tmp, "wb") as f:
-            for chunk in resp.iter_content(65536):
-                f.write(chunk)
     
-    return tmp
+    try:
+        with requests.get(url, stream=True, timeout=120) as resp:
+            resp.raise_for_status()
+            with open(tmp, "wb") as f:
+                for chunk in resp.iter_content(65536):
+                    f.write(chunk)
+        
+        if os.path.getsize(tmp) < 50000:
+            print("⚠️ Downloaded file too small")
+            return None
+        
+        return tmp
+    
+    except Exception as e:
+        print(f"❌ Download failed: {e}")
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        return None
 
 
 def get_music():
