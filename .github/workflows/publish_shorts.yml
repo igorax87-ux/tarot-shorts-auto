@@ -1,5 +1,4 @@
 name: Publish YouTube Shorts
-
 on:
   schedule:
     - cron: '0 6 * * *'
@@ -12,7 +11,6 @@ on:
         description: 'Тип контента'
         required: false
         default: 'auto'
-
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -22,7 +20,7 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q ffmpeg fonts-dejavu
+          sudo apt-get install -y -q ffmpeg fonts-dejavu espeak-ng
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -30,7 +28,9 @@ jobs:
           python-version: '3.11'
 
       - name: Install Python deps
-        run: pip install requests Pillow google-auth google-api-python-client google-auth-httplib2
+        run: |
+          pip install requests Pillow google-auth google-api-python-client \
+                      google-auth-httplib2 gTTS
 
       - name: Determine content type
         id: content
